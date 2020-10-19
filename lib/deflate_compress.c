@@ -2107,7 +2107,7 @@ deflate_compress_lazy(struct libdeflate_compressor * restrict c,
 			cur_len = hc_matchfinder_longest_match(&c->p.g.hc_mf,
 							       &in_cur_base,
 							       in_next,
-							       DEFLATE_MIN_MATCH_LEN - 1,
+							       DEFLATE_MIN_MATCH_LEN,
 							       max_len,
 							       nice_len,
 							       c->max_search_depth,
@@ -2115,7 +2115,7 @@ deflate_compress_lazy(struct libdeflate_compressor * restrict c,
 							       &cur_offset);
 			in_next += 1;
 
-			if (cur_len < DEFLATE_MIN_MATCH_LEN) {
+			if (cur_len < DEFLATE_MIN_MATCH_LEN + 1) {
 				/* No match found.  Choose a literal.  */
 				deflate_choose_literal(c, *(in_next - 1), &litrunlen);
 				observe_literal(&c->split_stats, *(in_next - 1));

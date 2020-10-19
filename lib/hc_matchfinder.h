@@ -117,9 +117,6 @@
 
 struct hc_matchfinder {
 
-	/* The hash table for finding length 3 matches  */
-	mf_pos_t hash3_tab[1UL << HC_MATCHFINDER_HASH3_ORDER];
-
 	/* The hash table which contains the first nodes of the linked lists for
 	 * finding length 4+ matches  */
 	mf_pos_t hash4_tab[1UL << HC_MATCHFINDER_HASH4_ORDER];
@@ -196,8 +193,8 @@ hc_matchfinder_longest_match(struct hc_matchfinder * const restrict mf,
 {
 	u32 depth_remaining = max_search_depth;
 	const u8 *best_matchptr = in_next;
-	mf_pos_t cur_node3, cur_node4;
-	u32 hash3, hash4;
+	mf_pos_t cur_node4;
+	u32 hash4;
 	u32 next_hashseq;
 	u32 seq4;
 	const u8 *matchptr;
@@ -219,16 +216,10 @@ hc_matchfinder_longest_match(struct hc_matchfinder * const restrict mf,
 		goto out;
 
 	/* Get the precomputed hash codes.  */
-	hash3 = next_hashes[0];
 	hash4 = next_hashes[1];
 
 	/* From the hash buckets, get the first node of each linked list.  */
-	cur_node3 = mf->hash3_tab[hash3];
 	cur_node4 = mf->hash4_tab[hash4];
-
-	/* Update for length 3 matches.  This replaces the singleton node in the
-	 * 'hash3' bucket with the node for the current sequence.  */
-	mf->hash3_tab[hash3] = cur_pos;
 
 	/* Update for length 4 matches.  This prepends the node for the current
 	 * sequence to the linked list in the 'hash4' bucket.  */
@@ -237,27 +228,14 @@ hc_matchfinder_longest_match(struct hc_matchfinder * const restrict mf,
 
 	/* Compute the next hash codes.  */
 	next_hashseq = get_unaligned_le32(in_next + 1);
-	next_hashes[0] = lz_hash(next_hashseq & 0xFFFFFF, HC_MATCHFINDER_HASH3_ORDER);
 	next_hashes[1] = lz_hash(next_hashseq, HC_MATCHFINDER_HASH4_ORDER);
-	prefetchw(&mf->hash3_tab[next_hashes[0]]);
 	prefetchw(&mf->hash4_tab[next_hashes[1]]);
 
 	if (best_len < 4) {  /* No match of length >= 4 found yet?  */
 
 		/* Check for a length 3 match if needed.  */
 
-		if (cur_node3 <= cutoff)
-			goto out;
-
 		seq4 = load_u32_unaligned(in_next);
-
-		if (best_len < 3) {
-			matchptr = &in_base[cur_node3];
-			if (load_u24_unaligned(matchptr) == loaded_u32_to_u24(seq4)) {
-				best_len = 3;
-				best_matchptr = matchptr;
-			}
-		}
 
 		/* Check for a length 4 match.  */
 
@@ -372,7 +350,7 @@ hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
 			      u32 * const restrict next_hashes)
 {
 	u32 cur_pos;
-	u32 hash3, hash4;
+	u32 hash4;
 	u32 next_hashseq;
 	u32 remaining = count;
 
@@ -380,7 +358,6 @@ hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
 		return &in_next[count];
 
 	cur_pos = in_next - *in_base_p;
-	hash3 = next_hashes[0];
 	hash4 = next_hashes[1];
 	do {
 		if (cur_pos == MATCHFINDER_WINDOW_SIZE) {
@@ -388,19 +365,15 @@ hc_matchfinder_skip_positions(struct hc_matchfinder * const restrict mf,
 			*in_base_p += MATCHFINDER_WINDOW_SIZE;
 			cur_pos = 0;
 		}
-		mf->hash3_tab[hash3] = cur_pos;
 		mf->next_tab[cur_pos] = mf->hash4_tab[hash4];
 		mf->hash4_tab[hash4] = cur_pos;
 
 		next_hashseq = get_unaligned_le32(++in_next);
-		hash3 = lz_hash(next_hashseq & 0xFFFFFF, HC_MATCHFINDER_HASH3_ORDER);
 		hash4 = lz_hash(next_hashseq, HC_MATCHFINDER_HASH4_ORDER);
 		cur_pos++;
 	} while (--remaining);
 
-	prefetchw(&mf->hash3_tab[hash3]);
 	prefetchw(&mf->hash4_tab[hash4]);
-	next_hashes[0] = hash3;
 	next_hashes[1] = hash4;
 
 	return in_next;
